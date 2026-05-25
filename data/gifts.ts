@@ -1,3 +1,7 @@
+/**
+ * Legacy seed data — used only to generate supabase/seed.sql.
+ * Runtime catalog is loaded from Supabase (see lib/supabase/gifts.ts).
+ */
 import { normalizeGift, type GiftSeed } from '@/lib/gifts';
 
 const giftSeeds: GiftSeed[] = [

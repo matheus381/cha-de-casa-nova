@@ -2,21 +2,31 @@
 
 import { AdminDashboard } from '@/components/admin/admin-dashboard';
 import { ToastContainer } from '@/components/ui/toast-container';
+import { DataLoadingGate } from '@/components/providers/data-loading-gate';
 import { useCartHydration } from '@/hooks/use-cart-hydration';
+import { useGiftsSync } from '@/hooks/use-gifts-sync';
 
 export default function AdminPage() {
-  const hydrated = useCartHydration();
+  const cartHydrated = useCartHydration();
+  const { isLoading, error, retry } = useGiftsSync();
 
-  if (!hydrated) {
+  if (!cartHydrated || isLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-zinc-950">
-        <div className="flex flex-col items-center gap-4">
-          <div className="h-10 w-10 animate-spin rounded-full border-2 border-violet-500/20 border-t-violet-500" />
-          <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
-            Carregando painel...
-          </p>
-        </div>
-      </div>
+      <DataLoadingGate
+        isLoading
+        error={null}
+        loadingMessage="Carregando painel..."
+      >
+        {null}
+      </DataLoadingGate>
+    );
+  }
+
+  if (error) {
+    return (
+      <DataLoadingGate isLoading={false} error={error} onRetry={retry}>
+        {null}
+      </DataLoadingGate>
     );
   }
 

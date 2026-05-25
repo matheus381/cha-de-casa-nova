@@ -1,34 +1,20 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage, type StateStorage } from 'zustand/middleware';
 import { Gift, CartItem } from '@/types';
-import { initialGifts } from '@/data/gifts';
-import {
-  createGiftId,
-  mergeGiftsWithCatalog,
-  normalizeGift,
-  type GiftSeed,
-} from '@/lib/gifts';
+import { useGiftsStore } from '@/store/use-gifts-store';
 
 interface CartState {
-  gifts: Gift[];
   cart: CartItem[];
   cartOpen: boolean;
   setCartOpen: (open: boolean) => void;
   addToCart: (gift: Gift) => void;
   removeFromCart: (giftId: string) => void;
   clearCart: () => void;
-  confirmPurchase: (giftIds: string[]) => void;
-  addGift: (input: Omit<GiftSeed, 'id' | 'available'> & { available?: boolean }) => Gift;
-  updateGift: (id: string, updates: Partial<Gift>) => void;
-  deleteGift: (id: string) => void;
-  toggleGiftAvailability: (id: string) => void;
-  resetGifts: () => void;
+  syncCartWithCatalog: () => void;
 }
 
-type PersistedCartState = Pick<CartState, 'gifts' | 'cart'>;
-
-function syncCartWithGifts(cart: CartItem[] | undefined, gifts: Gift[]): CartItem[] {
-  if (!cart?.length) return [];
+function syncCartItems(cart: CartItem[], gifts: Gift[]): CartItem[] {
+  if (!cart.length) return [];
 
   const giftById = new Map(gifts.map((gift) => [gift.id, gift]));
   return cart
@@ -53,26 +39,28 @@ const localStorageAdapter = createJSONStorage(
 
 export const useCartStore = create<CartState>()(
   persist(
-    (set) => ({
-      gifts: initialGifts,
+    (set, get) => ({
       cart: [],
       cartOpen: false,
       setCartOpen: (open) => set({ cartOpen: open }),
       addToCart: (gift) =>
         set((state) => {
-          const currentGift = state.gifts.find((g) => g.id === gift.id);
-          if (!currentGift?.available) {
+          const catalogGift =
+            useGiftsStore.getState().gifts.find((g) => g.id === gift.id) ?? gift;
+
+          if (!catalogGift.available) {
             return state;
           }
 
           const existingItemIndex = state.cart.findIndex(
-            (item) => item.gift.id === gift.id
+            (item) => item.gift.id === catalogGift.id
           );
           if (existingItemIndex > -1) {
             return { cartOpen: true };
           }
+
           return {
-            cart: [...state.cart, { gift: currentGift, quantity: 1 }],
+            cart: [...state.cart, { gift: catalogGift, quantity: 1 }],
             cartOpen: true,
           };
         }),
@@ -81,68 +69,23 @@ export const useCartStore = create<CartState>()(
           cart: state.cart.filter((item) => item.gift.id !== giftId),
         })),
       clearCart: () => set({ cart: [] }),
-      confirmPurchase: (giftIds) =>
-        set((state) => {
-          const updatedGifts = state.gifts.map((gift) =>
-            giftIds.includes(gift.id) ? { ...gift, available: false } : gift
-          );
-          return {
-            gifts: updatedGifts,
-            cart: [],
-          };
-        }),
-      addGift: (input) => {
-        const gift = normalizeGift({
-          ...input,
-          id: createGiftId(input.category, input.name),
-          available: input.available ?? true,
-        });
-
-        set((state) => ({ gifts: [gift, ...state.gifts] }));
-        return gift;
+      syncCartWithCatalog: () => {
+        const gifts = useGiftsStore.getState().gifts;
+        set((state) => ({ cart: syncCartItems(state.cart, gifts) }));
       },
-      updateGift: (id, updates) =>
-        set((state) => {
-          const gifts = state.gifts.map((gift) =>
-            gift.id === id ? normalizeGift({ ...gift, ...updates }) : gift
-          );
-          const cart = state.cart.map((item) =>
-            item.gift.id === id
-              ? { ...item, gift: gifts.find((g) => g.id === id)! }
-              : item
-          );
-          return { gifts, cart };
-        }),
-      deleteGift: (id) =>
-        set((state) => ({
-          gifts: state.gifts.filter((gift) => gift.id !== id),
-          cart: state.cart.filter((item) => item.gift.id !== id),
-        })),
-      toggleGiftAvailability: (id) =>
-        set((state) => ({
-          gifts: state.gifts.map((gift) =>
-            gift.id === id ? { ...gift, available: !gift.available } : gift
-          ),
-        })),
-      resetGifts: () => set({ gifts: initialGifts, cart: [] }),
     }),
     {
-      name: 'housewarming-gift-list-storage',
+      name: 'housewarming-cart-storage',
       storage: localStorageAdapter,
-      partialize: (state): PersistedCartState => ({
-        gifts: state.gifts,
+      partialize: (state) => ({
         cart: state.cart,
       }),
-      merge: (persisted, currentState) => {
-        const saved = persisted as PersistedCartState | undefined;
-        const gifts = mergeGiftsWithCatalog(saved?.gifts, initialGifts);
-        const cart = syncCartWithGifts(saved?.cart, gifts);
-
-        return {
-          ...currentState,
-          gifts,
-          cart,
-        };
+      onRehydrateStorage: () => (state) => {
+        if (!state) return;
+        const gifts = useGiftsStore.getState().gifts;
+        if (gifts.length > 0) {
+          state.cart = syncCartItems(state.cart, gifts);
+        }
       },
     }
   )

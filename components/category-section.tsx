@@ -1,6 +1,6 @@
 'use client';
 
-import { useCartStore } from '@/store/use-cart-store';
+import { useGiftsStore } from '@/store/use-gifts-store';
 import { GiftCard } from './gift-card';
 import { Gift } from '@/types';
 import { motion } from 'framer-motion';
@@ -13,7 +13,7 @@ interface CategorySectionProps {
 }
 
 export function CategorySection({ title, id, category, description }: CategorySectionProps) {
-  const gifts = useCartStore((state) => state.gifts);
+  const gifts = useGiftsStore((state) => state.gifts);
   // Sort gifts by availability so that available gifts appear first, and chosen ones are grouped at the end. Excellent UX!
   const filteredGifts = gifts
     .filter((gift) => gift.category === category)

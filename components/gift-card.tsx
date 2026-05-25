@@ -1,6 +1,5 @@
 'use client';
 
-import Image from 'next/image';
 import { Gift } from '@/types';
 import { useCartStore } from '@/store/use-cart-store';
 import { Button } from '@/components/ui/button';

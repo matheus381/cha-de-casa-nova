@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useCartStore } from '@/store/use-cart-store';
 
-/** Wait for Zustand persist to finish reading localStorage before rendering cart/gifts. */
+/** Wait for cart persist rehydration from localStorage. */
 export function useCartHydration() {
   const [hydrated, setHydrated] = useState(
     () => useCartStore.persist.hasHydrated()

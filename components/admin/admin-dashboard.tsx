@@ -13,8 +13,16 @@ import {
   ArrowLeft,
   Sparkles,
 } from 'lucide-react';
+import { useGiftsStore } from '@/store/use-gifts-store';
 import { useCartStore } from '@/store/use-cart-store';
 import { useToastStore } from '@/store/use-toast-store';
+import {
+  createGift,
+  updateGift,
+  deleteGiftById,
+  toggleGiftAvailability,
+} from '@/lib/supabase/gifts';
+import { getErrorMessage } from '@/lib/errors';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -29,11 +37,10 @@ import { cn } from '@/lib/utils';
 type CategoryFilter = GiftCategory | 'all';
 
 export function AdminDashboard() {
-  const gifts = useCartStore((state) => state.gifts);
-  const addGift = useCartStore((state) => state.addGift);
-  const updateGift = useCartStore((state) => state.updateGift);
-  const deleteGift = useCartStore((state) => state.deleteGift);
-  const toggleGiftAvailability = useCartStore((state) => state.toggleGiftAvailability);
+  const gifts = useGiftsStore((state) => state.gifts);
+  const upsertGiftLocal = useGiftsStore((state) => state.upsertGiftLocal);
+  const removeGiftLocal = useGiftsStore((state) => state.removeGiftLocal);
+  const removeFromCart = useCartStore((state) => state.removeFromCart);
   const addToast = useToastStore((state) => state.addToast);
 
   const [search, setSearch] = useState('');
@@ -43,6 +50,8 @@ export function AdminDashboard() {
   const [editingGift, setEditingGift] = useState<Gift | undefined>();
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deletingGift, setDeletingGift] = useState<Gift | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const stats = useMemo(() => {
     const available = gifts.filter((g) => g.available).length;
@@ -84,46 +93,84 @@ export function AdminDashboard() {
     setDeleteOpen(true);
   };
 
-  const handleFormSubmit = (values: GiftFormValues) => {
-    if (formMode === 'create') {
-      addGift(values);
+  const handleFormSubmit = async (values: GiftFormValues) => {
+    setIsSaving(true);
+    try {
+      if (formMode === 'create') {
+        const gift = await createGift(values);
+        upsertGiftLocal(gift);
+        addToast({
+          title: 'Presente adicionado',
+          description: `"${values.name}" foi incluído na lista.`,
+          type: 'success',
+        });
+      } else if (editingGift) {
+        const gift = await updateGift(editingGift.id, values);
+        upsertGiftLocal(gift);
+        addToast({
+          title: 'Presente atualizado',
+          description: `As alterações em "${values.name}" foram salvas.`,
+          type: 'success',
+        });
+      }
+      setFormOpen(false);
+    } catch (error) {
       addToast({
-        title: 'Presente adicionado',
-        description: `"${values.name}" foi incluído na lista.`,
-        type: 'success',
+        title: 'Erro ao salvar',
+        description: getErrorMessage(error, 'Não foi possível salvar o presente.'),
+        type: 'error',
       });
-      return;
-    }
-
-    if (editingGift) {
-      updateGift(editingGift.id, values);
-      addToast({
-        title: 'Presente atualizado',
-        description: `As alterações em "${values.name}" foram salvas.`,
-        type: 'success',
-      });
+    } finally {
+      setIsSaving(false);
     }
   };
 
-  const handleDeleteConfirm = () => {
+  const handleDeleteConfirm = async () => {
     if (!deletingGift) return;
-    deleteGift(deletingGift.id);
-    addToast({
-      title: 'Presente removido',
-      description: `"${deletingGift.name}" foi excluído da lista.`,
-      type: 'info',
-    });
-    setDeleteOpen(false);
-    setDeletingGift(null);
+    setIsDeleting(true);
+    try {
+      await deleteGiftById(deletingGift.id);
+      removeGiftLocal(deletingGift.id);
+      removeFromCart(deletingGift.id);
+      addToast({
+        title: 'Presente removido',
+        description: `"${deletingGift.name}" foi excluído da lista.`,
+        type: 'info',
+      });
+      setDeleteOpen(false);
+      setDeletingGift(null);
+    } catch (error) {
+      addToast({
+        title: 'Erro ao excluir',
+        description: getErrorMessage(error, 'Não foi possível excluir o presente.'),
+        type: 'error',
+      });
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
-  const handleToggle = (gift: Gift) => {
-    toggleGiftAvailability(gift.id);
-    addToast({
-      title: gift.available ? 'Marcado como indisponível' : 'Marcado como disponível',
-      description: gift.name,
-      type: 'info',
-    });
+  const handleToggle = async (gift: Gift) => {
+    try {
+      const updated = await toggleGiftAvailability(gift.id, !gift.available);
+      upsertGiftLocal(updated);
+      addToast({
+        title: updated.available
+          ? 'Marcado como disponível'
+          : 'Marcado como indisponível',
+        description: gift.name,
+        type: 'info',
+      });
+    } catch (error) {
+      addToast({
+        title: 'Erro ao atualizar',
+        description: getErrorMessage(
+          error,
+          'Não foi possível alterar a disponibilidade.'
+        ),
+        type: 'error',
+      });
+    }
   };
 
   return (
@@ -163,12 +210,13 @@ export function AdminDashboard() {
             </div>
             <p className="max-w-xl text-sm leading-relaxed text-zinc-500">
               Gerencie a lista do chá de casa nova. Todas as alterações são
-              persistidas automaticamente no navegador.
+              sincronizadas com o Supabase em tempo real.
             </p>
           </div>
 
           <Button
             onClick={openCreate}
+            disabled={isSaving}
             className="h-11 shrink-0 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 px-5 text-white shadow-lg shadow-violet-500/20 hover:from-violet-500 hover:to-fuchsia-500"
           >
             <Plus className="mr-2 h-4 w-4" />
@@ -300,6 +348,7 @@ export function AdminDashboard() {
         mode={formMode}
         gift={editingGift}
         onSubmit={handleFormSubmit}
+        isSubmitting={isSaving}
       />
 
       <DeleteGiftDialog
@@ -307,6 +356,7 @@ export function AdminDashboard() {
         onOpenChange={setDeleteOpen}
         gift={deletingGift}
         onConfirm={handleDeleteConfirm}
+        isDeleting={isDeleting}
       />
     </div>
   );

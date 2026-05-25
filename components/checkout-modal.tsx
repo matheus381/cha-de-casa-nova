@@ -4,8 +4,11 @@ import { useState } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useCartStore } from '@/store/use-cart-store';
+import { useGiftsStore } from '@/store/use-gifts-store';
 import { useToastStore } from '@/store/use-toast-store';
+import { createCheckoutOrder } from '@/lib/supabase/checkout';
 import { submitGiftSelection } from '@/lib/webhook';
+import { getErrorMessage } from '@/lib/errors';
 import {
   checkoutSchema,
   type CheckoutFormValues,
@@ -43,7 +46,10 @@ export function CheckoutModal({ isOpen, onClose, onSuccess }: CheckoutModalProps
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const cart = useCartStore((state) => state.cart);
-  const confirmPurchase = useCartStore((state) => state.confirmPurchase);
+  const clearCart = useCartStore((state) => state.clearCart);
+  const markGiftsUnavailableLocal = useGiftsStore(
+    (state) => state.markGiftsUnavailableLocal
+  );
   const addToast = useToastStore((state) => state.addToast);
 
   const {
@@ -81,11 +87,13 @@ export function CheckoutModal({ isOpen, onClose, onSuccess }: CheckoutModalProps
         deliveryMethod: values.deliveryMethod as DeliveryMethod,
       };
 
+      const giftIds = cart.map((item) => item.gift.id);
+
+      await createCheckoutOrder(buyer, cart);
       await submitGiftSelection(buyer, cart);
 
-      const giftIds = cart.map((item) => item.gift.id);
-      confirmPurchase(giftIds);
-
+      markGiftsUnavailableLocal(giftIds);
+      clearCart();
       reset();
 
       addToast({
@@ -96,11 +104,13 @@ export function CheckoutModal({ isOpen, onClose, onSuccess }: CheckoutModalProps
 
       onSuccess();
       onClose();
-    } catch {
+    } catch (error) {
       addToast({
         title: 'Erro ao processar',
-        description:
-          'Não foi possível enviar sua confirmação. Verifique sua conexão e tente novamente.',
+        description: getErrorMessage(
+          error,
+          'Não foi possível enviar sua confirmação. Verifique sua conexão e tente novamente.'
+        ),
         type: 'error',
       });
     } finally {

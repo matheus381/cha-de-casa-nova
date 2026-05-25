@@ -32,7 +32,8 @@ interface GiftFormDialogProps {
   onOpenChange: (open: boolean) => void;
   mode: 'create' | 'edit';
   gift?: Gift;
-  onSubmit: (values: GiftFormValues) => void;
+  onSubmit: (values: GiftFormValues) => void | Promise<void>;
+  isSubmitting?: boolean;
 }
 
 const defaultValues: GiftFormValues = {
@@ -63,6 +64,7 @@ export function GiftFormDialog({
   mode,
   gift,
   onSubmit,
+  isSubmitting = false,
 }: GiftFormDialogProps) {
   const {
     register,
@@ -70,7 +72,7 @@ export function GiftFormDialog({
     control,
     reset,
     watch,
-    formState: { errors, isSubmitting },
+    formState: { errors },
   } = useForm<GiftFormValues>({
     resolver: zodResolver(giftFormSchema),
     defaultValues,
@@ -83,9 +85,8 @@ export function GiftFormDialog({
     reset(mode === 'edit' && gift ? giftToFormValues(gift) : defaultValues);
   }, [open, mode, gift, reset]);
 
-  const handleFormSubmit = (values: GiftFormValues) => {
-    onSubmit(values);
-    onOpenChange(false);
+  const handleFormSubmit = async (values: GiftFormValues) => {
+    await onSubmit(values);
   };
 
   return (
@@ -100,7 +101,7 @@ export function GiftFormDialog({
           </DialogTitle>
           <DialogDescription className="text-zinc-500">
             {mode === 'create'
-              ? 'Adicione um item à lista. As alterações são salvas automaticamente.'
+              ? 'Adicione um item à lista no Supabase.'
               : 'Atualize as informações do presente selecionado.'}
           </DialogDescription>
         </DialogHeader>
