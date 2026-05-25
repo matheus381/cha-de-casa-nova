@@ -53,14 +53,23 @@ export function AdminDashboard() {
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  const stats = useMemo(() => {
-    const available = gifts.filter((g) => g.available).length;
-    return {
-      total: gifts.length,
-      available,
-      unavailable: gifts.length - available,
-    };
-  }, [gifts]);
+  const statsSource = useMemo(() => {
+  if (categoryFilter === 'all') {
+    return gifts;
+  }
+
+  return gifts.filter((gift) => gift.category === categoryFilter);
+}, [gifts, categoryFilter]);
+
+const stats = useMemo(() => {
+  const available = statsSource.filter((g) => g.available).length;
+
+  return {
+    total: statsSource.length,
+    available,
+    unavailable: statsSource.length - available,
+  };
+}, [statsSource]);
 
   const filteredGifts = useMemo(() => {
     const query = search.trim().toLowerCase();

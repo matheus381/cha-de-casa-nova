@@ -1,7 +1,7 @@
 import { BuyerInfo, CartItem, DeliveryMethod } from '@/types';
 
 const DEFAULT_WEBHOOK_URL =
-  'https://mssantos.app.n8n.cloud/webhook-test/gift-checkout';
+  'https://mssantos.app.n8n.cloud/webhook/gift-checkout';
 
 const DELIVERY_METHOD_LABELS: Record<DeliveryMethod, string> = {
   hands: 'Entrega em mãos',
