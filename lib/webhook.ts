@@ -1,59 +1,79 @@
-import { BuyerInfo, CartItem } from '@/types';
+import { BuyerInfo, CartItem, DeliveryMethod } from '@/types';
 
-export async function submitGiftSelection(buyer: BuyerInfo, items: CartItem[]) {
-  // Configurado para ler variáveis de ambiente do Next.js
-  const WEBHOOK_URL = process.env.NEXT_PUBLIC_N8N_WEBHOOK_URL || '';
-  
-  const payload = {
-    buyer: {
-      name: buyer.name,
-      phone: buyer.phone,
-      deliveryMethod: buyer.deliveryMethod === 'hands' 
-        ? 'Entrega em mãos' 
-        : buyer.deliveryMethod === 'surprise' 
-          ? 'Presente surpresa' 
-          : 'Compra online',
-    },
-    items: items.map((item) => ({
-      id: item.gift.id,
-      name: item.gift.name,
-      price: item.gift.price,
-      category: item.gift.category,
-    })),
-    totalPrice: items.reduce((acc, item) => acc + item.gift.price * item.quantity, 0),
+const DEFAULT_WEBHOOK_URL =
+  'https://mssantos.app.n8n.cloud/webhook-test/gift-checkout';
+
+const DELIVERY_METHOD_LABELS: Record<DeliveryMethod, string> = {
+  hands: 'Entrega em mãos',
+  surprise: 'Presente surpresa',
+  online: 'Compra online',
+};
+
+export interface GiftCheckoutPayload {
+  name: string;
+  phone: string;
+  deliveryMethod: string;
+  gifts: {
+    id: string;
+    name: string;
+    price: number;
+    category: string;
+    quantity: number;
+  }[];
+  total: number;
+  timestamp: string;
+}
+
+function normalizePhone(phone: string): string {
+  return phone.replace(/\D/g, '');
+}
+
+function buildCheckoutPayload(
+  buyer: BuyerInfo,
+  items: CartItem[]
+): GiftCheckoutPayload {
+  const gifts = items.map((item) => ({
+    id: item.gift.id,
+    name: item.gift.name,
+    price: item.gift.price,
+    category: item.gift.category,
+    quantity: item.quantity,
+  }));
+
+  const total = items.reduce(
+    (acc, item) => acc + item.gift.price * item.quantity,
+    0
+  );
+
+  return {
+    name: buyer.name.trim(),
+    phone: normalizePhone(buyer.phone),
+    deliveryMethod: DELIVERY_METHOD_LABELS[buyer.deliveryMethod],
+    gifts,
+    total,
     timestamp: new Date().toISOString(),
   };
+}
 
-  // Log para depuração fácil no console do navegador
-  console.log('[Webhook] Payload estruturado para envio:', payload);
+export async function submitGiftSelection(buyer: BuyerInfo, items: CartItem[]) {
+  const webhookUrl =
+    process.env.NEXT_PUBLIC_N8N_WEBHOOK_URL || DEFAULT_WEBHOOK_URL;
+  const payload = buildCheckoutPayload(buyer, items);
 
-  if (!WEBHOOK_URL) {
-    console.warn(
-      '[Webhook] NEXT_PUBLIC_N8N_WEBHOOK_URL não definida. Simulando envio para o n8n...'
+  const response = await fetch(webhookUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      `Webhook respondeu com erro: ${response.status} ${response.statusText}`
     );
-    // Simula latência de rede de 1.5 segundos para mostrar o loading spinner
-    await new Promise((resolve) => setTimeout(resolve, 1500));
-    return { success: true, mock: true };
   }
 
-  try {
-    const response = await fetch(WEBHOOK_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(payload),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Erro na resposta do Webhook: ${response.status} ${response.statusText}`);
-    }
-
-    // Tenta obter retorno JSON se houver
-    const data = await response.json().catch(() => ({}));
-    return { success: true, data };
-  } catch (error) {
-    console.error('[Webhook] Falha ao enviar para o n8n:', error);
-    throw error;
-  }
+  const data = await response.json().catch(() => ({}));
+  return { success: true, data };
 }
