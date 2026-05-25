@@ -23,6 +23,7 @@ let realtimeUnsubscribe: (() => void) | null = null;
 export const useGiftsStore = create<GiftsState>((set, get) => ({
   gifts: [],
   isLoading: true,
+  isRefreshing: false,
   error: null,
   isRealtimeReady: false,
 
